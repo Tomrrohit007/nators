@@ -1,12 +1,14 @@
 const mongoose = require("mongoose");
-
+const slugify = require("slugify")
 const tourSchema = new mongoose.Schema(
   {
     name: {
       type: String,
       required: [true, "Name is required"],
       unique: true,
-      trim:true
+      trim:true,
+      minLength:[10, "Must have characters more than or equal to 10"],
+      maxLength:[40, "Must have characters less than or equal to 40"]
     },
     duration: {
       type: Number,
@@ -26,6 +28,8 @@ const tourSchema = new mongoose.Schema(
     ratingsAverage: {
       type: Number,
       default: 4.5,
+      min:[1, "Rating must be between 1 and 5"],
+      max:[5, "Rating must be between 1 and 5"]
     },
     ratingsQuantity:{
       type: Number,
@@ -39,7 +43,11 @@ const tourSchema = new mongoose.Schema(
     difficulty:{
       type:String,
       required:[true, "Difficulty is required"],
-      trim:true
+      trim:true,
+      enum:{
+        values:["easy", "medium", "difficult"],
+        message:"Difficulty must either have value: easy, medium, difficult"
+      }
     },
     description:{
       type:String,
@@ -55,14 +63,15 @@ const tourSchema = new mongoose.Schema(
     secretTour:{
       type:String,
       default:false
+    },
+    createdAt:{
+      type:Date,
+      default:Date.now()
     }
   },
   {
     toJSON:{virtuals:true},
     toObject:{virtuals:true}
-  },
-  {
-    timestamps: true,
   }
 );
 
@@ -70,22 +79,22 @@ tourSchema.virtual("durationWeeks").get(function(){
   return this.duration/7
 })
 
+tourSchema.pre('save', function(next) {
+  this.slug = slugify(this.name, { lower: true });
+  next();
+});
+
 // Query Middleware
 tourSchema.pre(/^find/, function(next){
   this.find({secretTour:{$ne:true}})
   next() 
 })
 
-tourSchema.post(/^find/, function(docs, next){
-  console.log
-  next() 
-})
 
 // Aggregate Middleware
 
 tourSchema.pre("aggregate", function(next){
   this.pipeline().unshift({$match:{secretTour:{$ne:true}}})
-  console.log(this.pipeline())
   next()
 })
 
