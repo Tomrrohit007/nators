@@ -1,14 +1,11 @@
-const TourModel = require("../model/tourModel");
-const mongoose = require("mongoose");
-
-const tourModel = require("../model/tourModel");
+const Tour = require("../model/tourModel");
 const APIFeatures = require("../utils/apiFeature");
 const catchAsync = require("../utils/catchError");
 const AppError = require("../utils/appError")
 
 // 1) GET All
 const getAllTours = catchAsync(async (req, res, next) => {
-  const features = new APIFeatures(TourModel.find(), req.query)
+  const features = new APIFeatures(Tour.find(), req.query)
     .filter()
     .sort()
     .limitFields()
@@ -21,7 +18,12 @@ const getAllTours = catchAsync(async (req, res, next) => {
 // 2) GET Tour
 const getTour = catchAsync(async (req, res, next) => {
   const { id } = req.params;
-  const tour = await TourModel.findOne({ _id: id });
+  const tour = await Tour.findOne({ _id: id }).populate({
+    path:"reviews",
+    limit:10,
+    select:"review rating _id, user"
+  });
+
   if(!tour){
     return next(new AppError(`Tour with id /${id}/ not found`, 404))
   }
@@ -31,7 +33,7 @@ const getTour = catchAsync(async (req, res, next) => {
 
 // 3) Create tour
 const createTour = catchAsync(async (req, res, next) => {
-  const newTour = await TourModel.create({ ...req.body });
+  const newTour = await Tour.create({ ...req.body });
   return res
     .status(201)
     .json({ message: "Created Successfully", data: newTour });
@@ -40,7 +42,7 @@ const createTour = catchAsync(async (req, res, next) => {
 // 4) Update Tour
 const updateTour = catchAsync(async (req, res, next) => {
   const { id } = req.params;
-  const tour = await TourModel.findByIdAndUpdate(
+  const tour = await Tour.findByIdAndUpdate(
     id,
     { ...req.body },
     {
@@ -58,7 +60,7 @@ const updateTour = catchAsync(async (req, res, next) => {
 // 5) Delete Tour
 const deleteTour = catchAsync(async (req, res, next) => {
   const { id } = req.params;
-  const tour = await TourModel.findOneAndDelete({ _id: id });
+  const tour = await Tour.findOneAndDelete({ _id: id });
   if(!tour){
     return next(new AppError(`Tour with id /${id}/ not found`, 404))
   }
@@ -67,15 +69,18 @@ const deleteTour = catchAsync(async (req, res, next) => {
 
 // 6) Delete All tour
 
-const deleteAllTours = async () => {
-  const tour = await TourModel.deleteMany();
+const deleteAllTours = async (req, res, next) => {
+  const tour = await Tour.deleteMany();
   console.log("deleted Successfully");
+  res.status(200).json({
+    status:"success"
+  })
 };
 
 
 // 7) TOUR STATS
 const tourStats = catchAsync(async (req, res, next) => {
-  const stats = await tourModel.aggregate([
+  const stats = await Tour.aggregate([
     {
       $match: { ratingsAverage: { $gte: 4.5 } },
     },
@@ -102,7 +107,7 @@ const tourStats = catchAsync(async (req, res, next) => {
 
 const getMonthlyPlan = catchAsync(async (req, res, next) => {
   const year = req.params.year * 1;
-  const plan = await TourModel.aggregate([
+  const plan = await Tour.aggregate([
     // Unwind is used to destructure an array to a whole new object for every item array contains
     {
       $unwind: "$startDates",

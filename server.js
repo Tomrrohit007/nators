@@ -1,36 +1,60 @@
 require("dotenv").config()
 
+const express = require('express');
+const mongoose = require("mongoose")
+const morgan = require('morgan');
+const limitReq = require("express-rate-limit")
+const helmet = require("helmet")
+const mongoSanitize = require("express-mongo-sanitize")
+const xss = require("xss-clean")
+const hpp = require("hpp")
+const AppError = require("./src/utils/appError")
+const globalErrorControler = require("./src/controllers/globalErrorHandler")
+const tourRouter = require("./src/routes/tourRoutes")
+const userRouter = require("./src/routes/userRoutes")
+const reviewRouter = require("./src/routes/reviewRoute")
+const app = express();
+
 process.on("uncaughtException", err=>{
     console.log(err.name, err.message)
     console.log("UNCAUGHT EXCEPTION! SHUTTING DOWN...")
     process.exit(1)
 })
 
-const express = require('express');
-const mongoose = require("mongoose")
-const morgan = require('morgan');
+//GLOBAL MIDDLEWARES
+app.use(helmet())
+if (process.env.NODE_ENV === "development") {
+    app.use(morgan('dev'));
+}
 
-const app = express();
-app.use(express.json());
+// Limit requests from same IP
+const limiter = limitReq({
+    max:600,
+    windowMs:60*60*1000,
+    message:"Too many request from this user! Please try again after 4hr"
+})
+app.use(limiter)
+app.use(express.json({limit:"10kb"}));
+//Prevent noSQL Injection
+app.use(mongoSanitize())
+//Prevent html code Injection
+app.use(xss())
+// Clear Duplicates in query
+app.use(hpp({
+    whitelist:["duration", "secretTour",  "name", "maxGroupSize", "difficulty","ratingsAverage", "ratingsQuantity", "price"]
+}))
+
 app.use((req,res,next)=>{
     next()
 })
 
-const AppError = require("./src/utils/appError")
-const globalErrorControler = require("./src/controllers/globalErrorHandler")
 
-if (process.env.NODE_ENV === "development") {
-    app.use(morgan('dev'));
-}
-const tourRouter = require("./src/routes/tourRoutes")
-const userRouter = require("./src/routes/userRoutes")
 app.use('/tours', tourRouter);
-
-app.use("/user", userRouter);
+app.use("/users", userRouter);
+app.use("/reviews", reviewRouter);
 
 // If given route doesn't match with any routes in our app then this middleware will be executed
 app.all("*", (req, res, next)=>{
-    
     next(new AppError(`Cannot find the ${req.originalUrl} route on the server!`, 404));
 })
 

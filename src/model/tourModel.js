@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const slugify = require("slugify")
-const tourSchema = new mongoose.Schema(
+const Tour = new mongoose.Schema(
   {
     name: {
       type: String,
@@ -67,7 +67,40 @@ const tourSchema = new mongoose.Schema(
     createdAt:{
       type:Date,
       default:Date.now()
+    },
+    guides:[
+     { 
+      type:mongoose.Schema.ObjectId,      
+      ref:"users"                        // In ref your have enter model name
     }
+    ],
+    startLocation:{
+      type:{
+        type:String,
+        default:"Point",
+        enum:["Point"]
+      },
+      description:String,
+      address:String,
+      coordinates:[Number],
+      day:{
+        type:Number,
+        default:0
+      }
+    },
+    locations:[
+      {
+        type:{
+          type:String,
+          default:"Point",
+          enum:["Point"]
+        },
+        description:String,
+        address:String,
+        coordinates:[Number],
+        day:Number
+      }
+    ]
   },
   {
     toJSON:{virtuals:true},
@@ -75,27 +108,45 @@ const tourSchema = new mongoose.Schema(
   }
 );
 
-tourSchema.virtual("durationWeeks").get(function(){
+Tour.virtual("durationWeeks").get(function(){
   return this.duration/7
 })
 
-tourSchema.pre('save', function(next) {
+Tour.virtual("reviews", {
+  ref:"reviews",
+  foreignField:"tour",
+  localField:"_id"
+})
+
+Tour.pre('save', function(next) {
   this.slug = slugify(this.name, { lower: true });
   next();
 });
 
+
 // Query Middleware
-tourSchema.pre(/^find/, function(next){
+
+Tour.pre(/^find/, function(next){
   this.find({secretTour:{$ne:true}})
+  next() 
+})
+
+// Embedding guides with tours
+
+Tour.pre(/^find/, function(next){
+  this.populate({
+    path:"guides",
+    select:"-__v -passwordChangeAt"
+  })
   next() 
 })
 
 
 // Aggregate Middleware
 
-tourSchema.pre("aggregate", function(next){
-  this.pipeline().unshift({$match:{secretTour:{$ne:true}}})
+Tour.pre("aggregate", function(next){
+   this.pipeline().unshift({$match:{secretTour:{$ne:true}}})
   next()
 })
 
-module.exports = mongoose.model("tours", tourSchema);
+module.exports = mongoose.model("tours", Tour);
