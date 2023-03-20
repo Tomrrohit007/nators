@@ -47,11 +47,11 @@ const User = new mongoose.Schema({
   },
   passwordResetToken: String,
   resetTokenExpiresIn: Date,
-  active:{
-    type:Boolean,
-    select:false,
-    default:true
-  }
+  active: {
+    type: Boolean,
+    select: false,
+    default: true,
+  },
 });
 
 // Encrypting Password
@@ -73,10 +73,10 @@ User.pre("save", async function (next) {
 
 // Filtering out Deactivated Users
 
-User.pre(/^find/, function(next){
-  this.find({active:{$ne:false}})
-  next()
-})
+User.pre(/^find/, function (next) {
+  this.find({ active: { $ne: false } });
+  next();
+});
 
 // Checking if login password is correct
 User.methods.correctPassword = async function (

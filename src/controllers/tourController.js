@@ -1,82 +1,19 @@
 const Tour = require("../model/tourModel");
-const APIFeatures = require("../utils/apiFeature");
+const AppError = require("../utils/appError");
 const catchAsync = require("../utils/catchError");
-const AppError = require("../utils/appError")
+const {
+  deleteOne,
+  updateOne,
+  createOne,
+  getOne,
+  getAll,
+} = require("./handlerFactory");
 
-// 1) GET All
-const getAllTours = catchAsync(async (req, res, next) => {
-  const features = new APIFeatures(Tour.find(), req.query)
-    .filter()
-    .sort()
-    .limitFields()
-    .pagination();
-
-  const data = await features.query;
-  return res.status(200).json({ count: data.length, data });
-});
-
-// 2) GET Tour
-const getTour = catchAsync(async (req, res, next) => {
-  const { id } = req.params;
-  const tour = await Tour.findOne({ _id: id }).populate({
-    path:"reviews",
-    limit:10,
-    select:"review rating _id, user"
-  });
-
-  if(!tour){
-    return next(new AppError(`Tour with id /${id}/ not found`, 404))
-  }
-
-  res.status(200).json({ status: "success", tour });
-});
-
-// 3) Create tour
-const createTour = catchAsync(async (req, res, next) => {
-  const newTour = await Tour.create({ ...req.body });
-  return res
-    .status(201)
-    .json({ message: "Created Successfully", data: newTour });
-});
-
-// 4) Update Tour
-const updateTour = catchAsync(async (req, res, next) => {
-  const { id } = req.params;
-  const tour = await Tour.findByIdAndUpdate(
-    id,
-    { ...req.body },
-    {
-      new: true,
-      runValidators: true,
-    }
-  );
-
-  if(!tour){
-    return next(new AppError(`Tour with id /${id}/ not found`, 404))
-  }
-  res.status(200).json({ message: "Updated Successfuly" });
-});
-
-// 5) Delete Tour
-const deleteTour = catchAsync(async (req, res, next) => {
-  const { id } = req.params;
-  const tour = await Tour.findOneAndDelete({ _id: id });
-  if(!tour){
-    return next(new AppError(`Tour with id /${id}/ not found`, 404))
-  }
-  res.status(200).json({ message: "Tour deleted" });
-});
-
-// 6) Delete All tour
-
-const deleteAllTours = async (req, res, next) => {
-  const tour = await Tour.deleteMany();
-  console.log("deleted Successfully");
-  res.status(200).json({
-    status:"success"
-  })
-};
-
+const getAllTours = getAll(Tour);
+const getTour = getOne(Tour, { path: "reviews" });
+const createTour = createOne(Tour);
+const updateTour = updateOne(Tour);
+const deleteTour = deleteOne(Tour);
 
 // 7) TOUR STATS
 const tourStats = catchAsync(async (req, res, next) => {
@@ -146,6 +83,68 @@ const getMonthlyPlan = catchAsync(async (req, res, next) => {
   });
 });
 
+// To find out tour within a certain radius
+const getGeolocationWithin = catchAsync(async (req, res, next) => {
+  const { distance, latlng, unit } = req.params;
+  const [lat, lng] = latlng.split(",");
+
+  if (!lat || !lng) {
+    return next(
+      new AppError(
+        "Please provide latitude and longitude in the format of lat,lng",
+        400
+      )
+    );
+  }
+
+  const radius = unit === "mi" ? distance / 3958.8 : distance / 6378.1;
+
+  const tours = await Tour.find({
+    startLocation: { $geoWithin: { $centerSphere: [[lng, lat], radius] } },
+  });
+
+  res.status(200).json({
+    status: "success",
+    count: tours.length,
+    data: tours,
+  });
+});
+
+// To find out tour the distance between a point and tours
+const getDistancesOfTour = catchAsync(async (req, res, next) => {
+  const { unit, latlng } = req.params;
+  const [lat, lng] = latlng.split(",");
+
+  const multiplier = unit === "mi" ? 0.000621371 : 0.001;
+  if (!lat || !lng) {
+    return next(
+      new AppError(
+        "Please provide latitude and longitude in the format of lat,lng",
+        400
+      )
+    );
+  }
+
+  const distances = await Tour.aggregate([
+    {
+      $geoNear: {
+        near: {
+          type: "Point",
+          coordinates: [lng * 1, lat * 1],
+        },
+        distanceField: "distance",
+        distanceMultiplier: multiplier,
+      },
+    },
+    { $project: { distance: 1, name: 1 } },
+  ]);
+
+  res.status(200).json({
+    status:"success",
+    count:distances.length,
+    data:distances
+  })
+});
 
 module.exports = {
   createTour,
@@ -153,7 +152,8 @@ module.exports = {
   getTour,
   deleteTour,
   updateTour,
-  deleteAllTours,
   tourStats,
   getMonthlyPlan,
+  getDistancesOfTour,
+  getGeolocationWithin,
 };

@@ -2,46 +2,60 @@ const AppError = require("../utils/appError");
 const User = require("../model/userModel");
 const catchAsync = require("../utils/catchError");
 const APIFeatures = require("../utils/apiFeature");
+const { updateOne, deleteOne, getOne, getAll } = require("./handlerFactory");
 
-const getAllUser = catchAsync(async (req, res, next) => {
-  const features = new APIFeatures(User.find(), req.query)
-    .filter()
-    .sort()
-    .limitFields()
-    .pagination();
+const getAllUser = getAll(User);
+const getUser = getOne(User);
+const updateUserDetails = updateOne(User);
+const deleteUser = deleteOne(User);
 
-  const users = await features.query;
-  return res.status(200).json({ count: users.length, users });
-});
+// get Current User
+const getMe = async (req, res, next) => {
+  req.params.id = req.user.id;
+  next();
+};
 
-const updateUserDetails = catchAsync(async (req, res, next) => {
-  const excludeArray = ["role"];
-  excludeArray.forEach((el) => delete req.body[el]);
-
-  if (req.body.password || req.body.confirmPassword) {
-    next(new AppError("You cannot update Password"));
-  }
-
-  const updatedUser = await User.findByIdAndUpdate(
-    req.user.id,
-    { ...req.body },
-    {
-      new: true,
-      runValidators: true,
-    }
-  ).select("-passwordChangeAt, -__v");
-  return res.status(200).json({
+// To deactivate A user account
+const deactivateUser = catchAsync(async (req, res, next) => {
+  const user = await User.findByIdAndUpdate(req.user._id, { active: false });
+  res.status(204).json({
     status: "success",
-    user: updatedUser,
   });
 });
 
-const deleteUser = catchAsync(async(req, res, next)=>{
-  const user = await User.findByIdAndUpdate(req.user.id, {active:false})
-  res.status(204).json({
-    status:"success"
-  })
+// Check if someone try to change password or changedPassword without authentication
+const passwordCheck = catchAsync(async (req, res, next) => {
+  if (
+    req.body.password ||
+    req.body.confirmPassword ||
+    req.body.passwordChangeAt
+  ) {
+    return next(
+      new AppError(
+        "To update password or email use /users/update-password/ or /users/update-email/ route",
+        404
+      )
+    );
+  }
+  if (req.body.role) {
+    return next(new AppError("Only admin can update user role", 404));
+  }
 
-})
+  next();
+});
 
-module.exports = { getAllUser, updateUserDetails, deleteUser };
+const updateEmail = catchAsync(async (req, res, next) => {
+  req.body = req.body.email;
+  next();
+});
+
+module.exports = {
+  getAllUser,
+  updateUserDetails,
+  deactivateUser,
+  deleteUser,
+  getUser,
+  passwordCheck,
+  getMe,
+  updateEmail,
+};

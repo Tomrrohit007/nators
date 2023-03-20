@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const AppError = require("../utils/appError");
 const User = require("../model/userModel");
+const Review = require("../model/reviewModel");
 const catchAsync = require("../utils/catchError");
 const { promisify } = require("util");
 const sendEmail = require("../utils/email");
@@ -12,39 +13,49 @@ const jwtToken = (id) =>
     expiresIn: process.env.JWT_EXPIRES_IN,
   });
 
-const createTokenAndSend = ( user, code, res) => {
+const createTokenAndSend = (user, code, res) => {
   // Data is already stored in DB So we can remove this data to prevent it for sending as a response
-  user.active = undefined
-  user.password=undefined
-  user.passwordChangeAt = undefined
+  // Data is already stored in DB So we can remove this data to prevent it for sending as a response
+  user.active = undefined;
+  user.password = undefined;
+  user.passwordChangeAt = undefined;
 
   const token = jwtToken(user._id);
   const cookieOptions = {
-    expires:new Date(Date.now(process.env.COOKIE_EXPIRES_IN) + 30*24*60*60*1000),
-    httpOnly:true
-  }
-  if(process.env.NODE_ENV==="production") cookieOptions.secure = true
-  res.cookie("jwt", token, cookieOptions)
+    expires: new Date(
+      Date.now(process.env.COOKIE_EXPIRES_IN) + 30 * 24 * 60 * 60 * 1000
+    ),
+    httpOnly: true,
+  };
+  if (process.env.NODE_ENV === "production") cookieOptions.secure = true;
+  res.cookie("jwt", token, cookieOptions);
   res.status(code).json({
     status: "success",
     token,
     data: user,
   });
-}
+};
 
 const sendToken = (user, code, res) => {
+  // Data is already stored in DB So we can remove this data to prevent it for sending as a response
+  user.active = undefined;
+  user.password = undefined;
+  user.passwordChangeAt = undefined;
+
   const token = jwtToken(user._id);
   const cookieOptions = {
-    expires:new Date(Date.now(process.env.COOKIE_EXPIRES_IN) + 30*24*60*60*1000),
-    httpOnly:true
-  }
-  if(process.env.NODE_ENV==="production") cookieOptions.secure = true
-  res.cookie("jwt", token, cookieOptions)
+    expires: new Date(
+      Date.now(process.env.COOKIE_EXPIRES_IN) + 30 * 24 * 60 * 60 * 1000
+    ),
+    httpOnly: true,
+  };
+  if (process.env.NODE_ENV === "production") cookieOptions.secure = true;
+  res.cookie("jwt", token, cookieOptions);
   res.status(code).json({
     status: "success",
-    token
+    token,
   });
-}
+};
 
 // SIGN UP
 const signup = catchAsync(async (req, res, next) => {
@@ -54,9 +65,8 @@ const signup = catchAsync(async (req, res, next) => {
     password,
     email,
     confirmPassword,
-    role,
   });
-  createTokenAndSend(newUser, 201 , res)
+  createTokenAndSend(newUser, 201, res);
 });
 
 // LOGIN
@@ -71,7 +81,7 @@ const login = catchAsync(async (req, res, next) => {
   if (!user || !(await user.correctPassword(password, user.password))) {
     return next(new AppError("Incorrect email or password", 401));
   }
-  sendToken(user, 200, res)
+  sendToken(user, 200, res);
 });
 
 // Protected Route
@@ -181,24 +191,46 @@ const resetPassword = catchAsync(async (req, res, next) => {
   user.resetTokenExpiresIn = undefined;
   await user.save();
 
-  sendToken(user, 200, res)
+  sendToken(user, 200, res);
+});
+
+const passwordBeforeSaving = catchAsync(async (req, res, next) => {
+  if (!req.body.currentPassword) {
+    return next(
+      new AppError("Current Password is required to perform this action", 401)
+    );
+  }
+  const user = await User.findById(req.user.id).select("+password");
+  if (!(await user.correctPassword(req.body.currentPassword, user.password))) {
+    return next(new AppError("Incorrect current password", 401));
+  }
+  next();
 });
 
 // UPADATE PASSWORD
 const updatePassword = catchAsync(async (req, res, next) => {
-  const { currentPassword, newPassword, confirmNewPassword } = req.body;
+  const { newPassword, confirmNewPassword } = req.body;
+  req.user.password = newPassword;
+  req.user.confirmPassword = confirmNewPassword;
+  await req.user.save();
 
-  // 1) get the password for DB
-  const user = await User.findById(req.user._id).select("+password");
-  // 2) Check If user Input password is correct
-  if (!(await user.correctPassword(currentPassword, user.password))) {
-    return next(new AppError("Incorrect current Password", 401));
+  sendToken(req.user, 200, res);
+});
+
+// Restrict User from modifying other's reviews
+const restrictUser = catchAsync(async (req, res, next) => {
+  const review = await Review.findById(req.params.id);
+  if (!review) {
+    return next(
+      new AppError(`review doesn't exist with /${req.params.id}/ ID!`, 404)
+    );
   }
-  user.password = newPassword;
-  user.confirmPassword = confirmNewPassword;
-  await user.save();
-
-  sendToken(user, 200, res)
+  if (!(review.user.id === req.user.id || req.user.role === "admin")) {
+    return next(
+      new AppError("You do not have permission to perform this action", 404)
+    );
+  }
+  next();
 });
 
 module.exports = {
@@ -209,4 +241,6 @@ module.exports = {
   forgotPassword,
   resetPassword,
   updatePassword,
+  restrictUser,
+  passwordBeforeSaving,
 };

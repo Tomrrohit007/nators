@@ -39,7 +39,7 @@ app.use(express.json({limit:"10kb"}));
 app.use(mongoSanitize())
 //Prevent html code Injection
 app.use(xss())
-// Clear Duplicates in query
+// Clear Duplicate in query
 app.use(hpp({
     whitelist:["duration", "secretTour",  "name", "maxGroupSize", "difficulty","ratingsAverage", "ratingsQuantity", "price"]
 }))

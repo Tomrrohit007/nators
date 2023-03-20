@@ -4,33 +4,29 @@ const fs = require("fs")
 const app = express()
 
 const mongoose = require("mongoose") 
-const morgan = require('morgan');
-app.use(express.json());
-app.use((req, res, next)=>{
-  next()
-})
 
 const Tour = require("../../src/model/tourModel")
+const User = require("../../src/model/userModel")
+const Review = require("../../src/model/reviewModel")
 
-if(process.env.NODE_ENV==="development"){
-  app.use(morgan('dev'));
-}
-const tourRouter = require("../../src/routes/tourRoutes")
-app.use('/tours', tourRouter);
 
-mongoose.connect("mongodb://localhost:27017/tourapp")
+mongoose.connect(process.env.DATABASE_LOCAL)
 .then(()=>{
-  app.listen(process.env.PORT, () => {
+  app.listen(4000, () => {
     console.log('Connected to DB and Listening...');
   });
 })
 
 
 const tours = JSON.parse(fs.readFileSync(`${__dirname}/tours.json`))
+const users = JSON.parse(fs.readFileSync(`${__dirname}/users.json`))
+const reviews = JSON.parse(fs.readFileSync(`${__dirname}/reviews.json`))
 
 const importData = async () =>{
     try {
         await Tour.create(tours)
+        await User.create(users, { validateBeforeSave: false })
+        await Review.create(reviews)
         console.log("Data Successfully added")
         process.exit(1)
     } catch (error) {
@@ -38,4 +34,21 @@ const importData = async () =>{
     }
 }
 
-importData()
+const deleteData = async () =>{
+  try {
+      await Tour.deleteMany()
+      await User.deleteMany()
+      await Review.deleteMany()
+      console.log("Data Successfully deleted")
+      process.exit(1)
+  } catch (error) {
+      console.log(error)
+  }
+}
+
+if(process.argv[2]==="--import"){
+  importData()
+}
+else if(process.argv[2]==="--delete"){
+  deleteData()
+}
