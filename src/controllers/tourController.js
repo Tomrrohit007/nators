@@ -1,22 +1,69 @@
 const Tour = require("../model/tourModel");
 const AppError = require("../utils/appError");
 const catchAsync = require("../utils/catchError");
-const {
-  deleteOne,
-  updateOne,
-  createOne,
-  getOne,
-  getAll,
-} = require("./handlerFactory");
+const handlerFactory = require("./handlerFactory");
+const multer = require("multer");
+const sharp = require("sharp");
 
-const getAllTours = getAll(Tour);
-const getTour = getOne(Tour, { path: "reviews" });
-const createTour = createOne(Tour);
-const updateTour = updateOne(Tour);
-const deleteTour = deleteOne(Tour);
+const multerStorage = multer.memoryStorage();
+
+const multerFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith("image")) {
+    cb(null, true);
+  } else {
+    cb(new AppError("Not an image! Please upload only images.", 400), false);
+  }
+};
+
+const upload = multer({
+  storage: multerStorage,
+  fileFilter: multerFilter,
+});
+
+exports.uploadImages = upload.fields([
+  { name: "imageCover", maxCount: 1 },
+  { name: "images", maxCount: 3 },
+]);
+
+exports.resizeImages = catchAsync(async (req, res, next) => {
+  if (!req.files.imageCover || !req.files.images) return next();
+
+  // 1) Cover image
+  req.body.imageCover = `tour-${req.params.id}-${Date.now()}-cover.jpeg`;
+  await sharp(req.files.imageCover[0].buffer)
+    .resize(2000, 1333)
+    .toFormat("jpeg")
+    .jpeg({ quality: 90 })
+    .toFile(`public/img/tours/${req.body.imageCover}`);
+
+    
+
+  // 2) Images
+  req.body.images = await Promise.all(
+    req.files.images.map(async (file, i) => {
+      const filename = `tour-${req.params.id}-${Date.now()}-${i + 1}.jpeg`;
+
+      await sharp(file.buffer)
+        .resize(2000, 1333)
+        .toFormat("jpeg")
+        .jpeg({ quality: 90 })
+        .toFile(`public/img/tours/${filename}`);
+
+      return filename
+
+    }));
+  next();
+});
+
+
+exports.getAllTours = handlerFactory.getAll(Tour);
+exports.getTour = handlerFactory.getOne(Tour, { path: "reviews" });
+exports.createTour = handlerFactory.createOne(Tour);
+exports.updateTour = handlerFactory.updateOne(Tour);
+exports.deleteTour = handlerFactory.deleteOne(Tour);
 
 // 7) TOUR STATS
-const tourStats = catchAsync(async (req, res, next) => {
+exports.tourStats = catchAsync(async (req, res, next) => {
   const stats = await Tour.aggregate([
     {
       $match: { ratingsAverage: { $gte: 4.5 } },
@@ -42,7 +89,7 @@ const tourStats = catchAsync(async (req, res, next) => {
 
 // 8) GET MONTHLY PLANS
 
-const getMonthlyPlan = catchAsync(async (req, res, next) => {
+exports.getMonthlyPlan = catchAsync(async (req, res, next) => {
   const year = req.params.year * 1;
   const plan = await Tour.aggregate([
     // Unwind is used to destructure an array to a whole new object for every item array contains
@@ -84,7 +131,7 @@ const getMonthlyPlan = catchAsync(async (req, res, next) => {
 });
 
 // To find out tour within a certain radius
-const getGeolocationWithin = catchAsync(async (req, res, next) => {
+exports.getGeolocationWithin = catchAsync(async (req, res, next) => {
   const { distance, latlng, unit } = req.params;
   const [lat, lng] = latlng.split(",");
 
@@ -111,7 +158,7 @@ const getGeolocationWithin = catchAsync(async (req, res, next) => {
 });
 
 // To find out tour the distance between a point and tours
-const getDistancesOfTour = catchAsync(async (req, res, next) => {
+exports.getDistancesOfTour = catchAsync(async (req, res, next) => {
   const { unit, latlng } = req.params;
   const [lat, lng] = latlng.split(",");
 
@@ -140,20 +187,8 @@ const getDistancesOfTour = catchAsync(async (req, res, next) => {
   ]);
 
   res.status(200).json({
-    status:"success",
-    count:distances.length,
-    data:distances
-  })
+    status: "success",
+    count: distances.length,
+    data: distances,
+  });
 });
-
-module.exports = {
-  createTour,
-  getAllTours,
-  getTour,
-  deleteTour,
-  updateTour,
-  tourStats,
-  getMonthlyPlan,
-  getDistancesOfTour,
-  getGeolocationWithin,
-};

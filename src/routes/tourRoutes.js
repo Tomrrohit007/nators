@@ -1,16 +1,6 @@
 const express = require("express");
-const { protectRoute, restrictTo } = require("../controllers/authControllers");
-const {
-  createTour,
-  getAllTours,
-  getTour,
-  deleteTour,
-  updateTour,
-  tourStats,
-  getMonthlyPlan,
-  getDistancesOfTour,
-  getGeolocationWithin,
-} = require("../controllers/tourController");
+const authControllers = require("../controllers/authControllers");
+const tourControllers = require("../controllers/tourController");
 const Review = require("../routes/reviewRoute");
 
 const router = express.Router();
@@ -18,32 +8,32 @@ const router = express.Router();
 router.use("/:tourId/reviews", Review);
 
 // Aggregated Routes
-router.route("/tour-stats").get(tourStats);
+router.route("/tour-stats").get(tourControllers.tourStats);
 router
   .route("/monthly-plan/:year")
   .get(
-    protectRoute,
-    restrictTo("admin", "lead-guide", "guide"),
-    getMonthlyPlan
+    authControllers.protectRoute,
+    authControllers.restrictTo("admin", "lead-guide", "guide"),
+    tourControllers.getMonthlyPlan
   );
 
 // Geolocations
 router
   .route("/geolocation-within/:distance/center/:latlng/unit/:unit")
-  .get(getGeolocationWithin);
-router.route("/distances/center/:latlng/unit/:unit").get(getDistancesOfTour)
+  .get(tourControllers.getGeolocationWithin);
+router.route("/distances/center/:latlng/unit/:unit").get(tourControllers.getDistancesOfTour)
 
 // Routes without ID
 router
   .route("/")
-  .get(getAllTours)
-  .post(protectRoute, restrictTo("admin"), createTour);
+  .get(tourControllers.getAllTours)
+  .post(authControllers.protectRoute, authControllers.restrictTo("admin"), tourControllers.createTour);
 // Routes with ID
 router
   .route("/:id")
-  .get(getTour)
-  .delete(protectRoute, restrictTo("admin"), deleteTour)
-  .patch(protectRoute, restrictTo("admin"), updateTour);
+  .get(tourControllers.getTour)
+  .delete(authControllers.protectRoute, authControllers.restrictTo("admin"), tourControllers.deleteTour)
+  .patch(authControllers.protectRoute, authControllers.restrictTo("admin"),tourControllers.uploadImages, tourControllers.resizeImages, tourControllers.updateTour);
 
 //Tour/Review
 module.exports = router;

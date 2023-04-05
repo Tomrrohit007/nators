@@ -5,7 +5,7 @@ const User = require("../model/userModel");
 const Review = require("../model/reviewModel");
 const catchAsync = require("../utils/catchError");
 const { promisify } = require("util");
-const sendEmail = require("../utils/email");
+const Email = require("../utils/email");
 
 // JWT TOKEN
 const jwtToken = (id) =>
@@ -14,7 +14,6 @@ const jwtToken = (id) =>
   });
 
 const createTokenAndSend = (user, code, res) => {
-  // Data is already stored in DB So we can remove this data to prevent it for sending as a response
   // Data is already stored in DB So we can remove this data to prevent it for sending as a response
   user.active = undefined;
   user.password = undefined;
@@ -58,7 +57,7 @@ const sendToken = (user, code, res) => {
 };
 
 // SIGN UP
-const signup = catchAsync(async (req, res, next) => {
+exports.signup = catchAsync(async (req, res, next) => {
   const { name, password, email, confirmPassword, role } = req.body;
   const newUser = await User.create({
     name,
@@ -66,11 +65,15 @@ const signup = catchAsync(async (req, res, next) => {
     email,
     confirmPassword,
   });
+  const url = `http://${req.get("host")}/user/me`;
+
+  await new Email(newUser, url).sendWelcome();
+
   createTokenAndSend(newUser, 201, res);
 });
 
 // LOGIN
-const login = catchAsync(async (req, res, next) => {
+exports.login = catchAsync(async (req, res, next) => {
   const { password, email } = req.body;
 
   if (!email || !password) {
@@ -86,7 +89,7 @@ const login = catchAsync(async (req, res, next) => {
 
 // Protected Route
 
-const protectRoute = catchAsync(async (req, res, next) => {
+exports.protectRoute = catchAsync(async (req, res, next) => {
   const { authorization } = req.headers;
   let token;
   // 1) GET TOKEN
@@ -119,7 +122,7 @@ const protectRoute = catchAsync(async (req, res, next) => {
   next();
 });
 
-const restrictTo = (...roles) => {
+exports.restrictTo = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
       return next(
@@ -134,7 +137,7 @@ const restrictTo = (...roles) => {
 };
 
 // Forget Password
-const forgotPassword = catchAsync(async (req, res, next) => {
+exports.forgotPassword = catchAsync(async (req, res, next) => {
   const user = await User.findOne({ email: req.body.email });
 
   if (!user) {
@@ -176,7 +179,7 @@ const forgotPassword = catchAsync(async (req, res, next) => {
 });
 
 // RESET THE PASSWORD
-const resetPassword = catchAsync(async (req, res, next) => {
+exports.resetPassword = catchAsync(async (req, res, next) => {
   const hashedToken = crypto
     .createHash("sha256")
     .update(req.params.token)
@@ -194,7 +197,7 @@ const resetPassword = catchAsync(async (req, res, next) => {
   sendToken(user, 200, res);
 });
 
-const passwordBeforeSaving = catchAsync(async (req, res, next) => {
+exports.passwordBeforeSaving = catchAsync(async (req, res, next) => {
   if (!req.body.currentPassword) {
     return next(
       new AppError("Current Password is required to perform this action", 401)
@@ -208,7 +211,7 @@ const passwordBeforeSaving = catchAsync(async (req, res, next) => {
 });
 
 // UPADATE PASSWORD
-const updatePassword = catchAsync(async (req, res, next) => {
+exports.updatePassword = catchAsync(async (req, res, next) => {
   const { newPassword, confirmNewPassword } = req.body;
   req.user.password = newPassword;
   req.user.confirmPassword = confirmNewPassword;
@@ -218,7 +221,7 @@ const updatePassword = catchAsync(async (req, res, next) => {
 });
 
 // Restrict User from modifying other's reviews
-const restrictUser = catchAsync(async (req, res, next) => {
+exports.restrictUser = catchAsync(async (req, res, next) => {
   const review = await Review.findById(req.params.id);
   if (!review) {
     return next(
@@ -233,14 +236,24 @@ const restrictUser = catchAsync(async (req, res, next) => {
   next();
 });
 
-module.exports = {
-  signup,
-  login,
-  protectRoute,
-  restrictTo,
-  forgotPassword,
-  resetPassword,
-  updatePassword,
-  restrictUser,
-  passwordBeforeSaving,
-};
+// Check if someone try to change password or changedPassword without authentication
+exports.passwordAndEmailCheck = catchAsync(async (req, res, next) => {
+  if (
+    req.body.password ||
+    req.body.confirmPassword ||
+    req.body.passwordChangeAt ||
+    req.body.email
+  ) {
+    return next(
+      new AppError(
+        "To update password or email use /users/update-password/ or /users/update-email/ route",
+        404
+      )
+    );
+  }
+  if (req.body.role) {
+    return next(new AppError("Only admin can update user role", 404));
+  }
+  if (req.file) req.body.image = req.file.filename;
+  next();
+});

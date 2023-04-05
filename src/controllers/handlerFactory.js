@@ -2,7 +2,7 @@ const AppError = require("../utils/appError");
 const catchAsync = require("../utils/catchError");
 const APIFeatures = require("../utils/apiFeature");
 
-const getAll = (Model) =>
+exports.getAll = (Model) =>
   catchAsync(async (req, res, next) => {
     let query = {};
     if (req.params.tourId) query = { tour: req.params.tourId };
@@ -16,7 +16,7 @@ const getAll = (Model) =>
     return res.status(200).json({ count: data.length, data });
   });
 
-const getOne = (Model, popOptions) =>
+exports.getOne = (Model, popOptions) =>
   catchAsync(async (req, res, next) => {
     let query = Model.findById(req.params.id);
     if (popOptions) query = query.populate(popOptions);
@@ -31,7 +31,7 @@ const getOne = (Model, popOptions) =>
   });
 
 // Delete one
-const deleteOne = (Model) =>
+exports.deleteOne = (Model) =>
   catchAsync(async (req, res, next) => {
     const doc = await Model.findByIdAndDelete(req.params.id).exec();
 
@@ -47,12 +47,12 @@ const deleteOne = (Model) =>
   });
 
 //Update one
-const updateOne = (Model) =>
+exports.updateOne = (Model) =>
   catchAsync(async (req, res, next) => {
     const doc = await Model.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true,
-    }).exec();
+    })
 
     if (!doc) {
       next(new AppError(`Invalid ${Model.modelName.toLowerCase()} ID`, 404));
@@ -66,7 +66,7 @@ const updateOne = (Model) =>
   });
 
 // Create One
-const createOne = (Model) =>
+exports.createOne = (Model) =>
   catchAsync(async (req, res, next) => {
     const newDoc = await Model.create(req.body);
     return res
@@ -74,4 +74,3 @@ const createOne = (Model) =>
       .json({ message: "Created Successfully", data: newDoc });
   });
 
-module.exports = { deleteOne, updateOne, createOne, getOne, getAll };
