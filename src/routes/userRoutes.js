@@ -27,10 +27,16 @@ router.patch(
 router.patch(
   "/update-details",
   userController.getMe,
-  userController.uploadUserPhoto,
-  userController.resizeImageBeforeUpload,
   authController.passwordAndEmailCheck,
+  userController.uploadUserPhoto,
+  userController.hashImageUrl,
   userController.updateUserDetails
+);
+
+router.patch(
+  "/remove-image",
+  authController.passwordAndEmailCheck,
+  userController.destroyUserPhoto
 );
 router.delete(
   "/deactivate-account",

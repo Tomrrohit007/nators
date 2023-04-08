@@ -21,6 +21,9 @@ const User = new mongoose.Schema({
     type: String,
     default:"default.jpg"
   },
+  publicId:{
+    type:String
+  },
   role: {
     type: String,
     enum: ["admin", "user", "guide", "lead-guide"],
